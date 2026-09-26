@@ -1,0 +1,13 @@
+*.bat text eol=crlf
+*.py text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.dll binary
+*.exe binary
+*.pyd binary
+*.ttf binary
+*.cat binary
+*.gif binary
+*.png binary
+offline/runtime/python/python312.zip binary

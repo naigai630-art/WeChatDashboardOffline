@@ -1,0 +1,32 @@
+# Runtime output and private data
+work/
+output/
+data/
+analysis_data/
+stats.json
+records.jsonl
+keys.json
+image_keys.json
+wechatauto_keys/
+*.db
+*.sqlite
+*.sqlite3
+*.log
+
+# Python cache only. Windows runtime binaries remain tracked.
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Editors and operating systems
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Local archives
+*.zip
+!offline/runtime/python/python312.zip

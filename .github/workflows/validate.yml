@@ -1,0 +1,35 @@
+name: Validate offline bundle
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check required files
+        shell: pwsh
+        run: |
+          $required = @(
+            'run_offline.bat',
+            'tools/offline_launcher.py',
+            'tools/export_wechat_offline.py',
+            'tools/build_stats.py',
+            'wechat-chat-dashboard/scripts/render_dashboard.py',
+            'offline/runtime/python/python.exe',
+            'offline/third_party/wechatauto-replica/LICENSE'
+          )
+          foreach ($path in $required) {
+            if (-not (Test-Path $path)) { throw "Missing required file: $path" }
+          }
+
+      - name: Check bundled Python and dependencies
+        shell: cmd
+        run: offline\runtime\python\python.exe -c "import PIL, cryptography, zstandard, colorama; print('offline runtime ok')"
+
+      - name: Compile project scripts
+        shell: cmd
+        run: offline\runtime\python\python.exe -m py_compile tools\offline_launcher.py tools\export_wechat_offline.py tools\build_stats.py wechat-chat-dashboard\scripts\render_dashboard.py
