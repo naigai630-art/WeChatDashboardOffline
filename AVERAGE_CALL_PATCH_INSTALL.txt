@@ -1,0 +1,21 @@
+平均通话时长补丁
+
+新增内容
+
+平均通话时长 = 累计接通时长 / 接通次数
+
+未接通、取消、拒绝、忙线和无法解析出正数时长的记录不会进入平均值。
+
+安装方法
+
+1. 打开原来的 WeChatDashboardOffline 文件夹。
+2. 将本补丁 ZIP 直接解压到该文件夹。
+3. Windows 询问是否覆盖时，选择全部替换。
+4. 重新双击 run_offline.bat。
+
+补丁会替换：
+
+tools\build_stats.py
+wechat-chat-dashboard\scripts\render_dashboard.py
+
+本补丁不包含聊天记录、账号信息、数据库或密钥。
