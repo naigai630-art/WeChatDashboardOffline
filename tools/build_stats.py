@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import html
 import json
 import re
 from collections import Counter
@@ -12,7 +13,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 
-CALL_TYPE_CODES = {50}
+CALL_TYPE_CODES = {50, 52, 53}
 HUMAN_TYPE_NAMES = {
     "文本", "图片", "语音", "视频", "动画表情", "位置", "文件/链接/卡片", "红包",
 }
@@ -65,22 +66,84 @@ def to_datetime(value: Any) -> datetime | None:
         return None
 
 
+def _clock_seconds(value: str) -> int:
+    parts = [int(part) for part in value.split(":")]
+    if len(parts) == 2:
+        return parts[0] * 60 + parts[1]
+    if len(parts) == 3:
+        return parts[0] * 3600 + parts[1] * 60 + parts[2]
+    return 0
+
+
 def duration_seconds(content: Any) -> int:
-    text = str(content or "")
-    for pattern in (
-        r"<duration>\s*(\d+)\s*</duration>",
-        r"(?:duration|callDuration)[\"'=:\s>]+(\d+)",
-    ):
+    """解析微信不同版本中的通话时长，无法确认时返回 0。"""
+    text = str(content or "").replace("\\x00", "")
+    # compress_content 有时保存 HTML 转义后的 XML，最多展开两层。
+    for _ in range(2):
+        expanded = html.unescape(text)
+        if expanded == text:
+            break
+        text = expanded
+
+    # 微信 4.x 的 <duration> 标签实测可能恒为 0，真实时长在 CDATA 文本中，
+    # 所以必须优先解析“通话时长/通话中断 MM:SS”。
+    clock = re.search(
+        r"(?:通话时长|通话时间|通话中断|持续时间|时长|duration)\s*[：:=]?\s*((?:\d{1,3}:)?\d{1,2}:\d{2})",
+        text,
+        re.I,
+    )
+    if clock:
+        return _clock_seconds(clock.group(1))
+
+    chinese = re.search(
+        r"(?:通话时长|通话时间|持续时间|时长)\s*[：:]?\s*"
+        r"(?:(\d+)\s*(?:小时|时))?\s*(?:(\d+)\s*分)?\s*(?:(\d+)\s*秒)?",
+        text,
+    )
+    if chinese and any(chinese.groups()):
+        hours, minutes, seconds = (int(value or 0) for value in chinese.groups())
+        return hours * 3600 + minutes * 60 + seconds
+
+    field = r"(?:duration|callDuration|voipDuration|voipduration|call_time|calltime|time_len|timelen)"
+    patterns = (
+        rf"<{field}[^>]*>\s*(\d{{1,10}})\s*</(?:duration|callDuration|voipDuration|voipduration|call_time|calltime|time_len|timelen)>",
+        rf"\b{field}\b\s*=\s*[\"'](\d{{1,10}})[\"']",
+        rf"[\"']{field}[\"']\s*:\s*[\"']?(\d{{1,10}})",
+        rf"\b{field}\b\s*[=:：>\s]+(\d{{1,10}})",
+    )
+    for pattern in patterns:
         match = re.search(pattern, text, re.I)
         if match:
-            return int(match.group(1))
-    match = re.search(r"(?:通话时长|通话时间|时长)\s*[：:]?\s*(\d{1,2}):(\d{2})(?::(\d{2}))?", text)
-    if not match:
-        return 0
-    a, b, c = match.groups()
-    if c is None:
-        return int(a) * 60 + int(b)
-    return int(a) * 3600 + int(b) * 60 + int(c)
+            value = int(match.group(1))
+            if value <= 0:
+                continue
+            # 明显是毫秒时转换为秒，普通长通话秒数不会达到一百万。
+            return value // 1000 if value >= 1_000_000 else value
+    return 0
+
+
+def base_type_code(value: Any) -> int | None:
+    try:
+        code = int(value)
+    except (TypeError, ValueError):
+        return None
+    if code in CALL_TYPE_CODES:
+        return code
+    if code > 0xFFFF:
+        low32 = code & 0xFFFFFFFF
+        if low32 in CALL_TYPE_CODES:
+            return low32
+        low8 = low32 & 0xFF
+        if low8 in CALL_TYPE_CODES:
+            return low8
+    return code
+
+
+def call_category(content: Any) -> str:
+    text = html.unescape(str(content or "")).lower()
+    if "视频" in text or "video" in text or "videomsg" in text:
+        return "视频通话"
+    return "语音通话"
 
 
 def message_type(row: dict[str, Any]) -> str:
@@ -129,13 +192,13 @@ def build(payload: dict[str, Any], messages: list[dict[str, Any]], self_name: st
     for row, when in dated:
         sender = self_name if is_self(row, payload) else other_name
         kind = message_type(row)
-        type_code = row.get("type_code")
-        is_call = type_code in CALL_TYPE_CODES or "通话" in kind
+        type_code = base_type_code(row.get("type_code"))
+        is_call = type_code in CALL_TYPE_CODES or "通话" in kind or "voip" in kind.lower()
         if is_call:
             seconds = duration_seconds(row.get("content"))
             call_records.append({
                 "time": when.strftime("%Y-%m-%d %H:%M:%S"),
-                "category": "视频通话" if "视频" in str(row.get("content") or "") else "语音通话",
+                "category": call_category(row.get("content")),
                 "duration_seconds": seconds,
             })
             continue
@@ -151,6 +214,8 @@ def build(payload: dict[str, Any], messages: list[dict[str, Any]], self_name: st
     first_time = dated[0][1]
     last_time = dated[-1][1]
     connected = [item for item in call_records if item["duration_seconds"] > 0]
+    total_call_seconds = sum(item["duration_seconds"] for item in connected)
+    average_call_seconds = round(total_call_seconds / len(connected)) if connected else 0
     stats = {
         "total_rows": len(dated),
         "human_rows": human_rows,
@@ -168,7 +233,8 @@ def build(payload: dict[str, Any], messages: list[dict[str, Any]], self_name: st
         "calls": {
             "total": len(call_records),
             "connected": len(connected),
-            "total_duration_seconds": sum(item["duration_seconds"] for item in connected),
+            "total_duration_seconds": total_call_seconds,
+            "average_duration_seconds": average_call_seconds,
         },
     }
     return stats, call_records
@@ -187,6 +253,15 @@ def main() -> None:
     payload, messages = load_messages(args.input)
     stats, calls = build(payload, messages, args.self_name, args.other_name)
     write_outputs(args.out_dir, stats, calls)
+    call_stats = stats["calls"]
+    print(
+        "通话统计："
+        f"总计 {call_stats['total']}，"
+        f"接通 {call_stats['connected']}，"
+        f"累计 {call_stats['total_duration_seconds']} 秒"
+    )
+    if call_stats["total"] and not call_stats["connected"]:
+        print("[提示] 已找到通话消息，但没有解析到正数时长；这些记录可能均未接通，或当前微信版本使用了新的时长字段。")
     print(args.out_dir / "stats.json")
     print(args.out_dir / "records.jsonl")
 

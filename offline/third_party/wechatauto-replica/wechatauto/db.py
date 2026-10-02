@@ -2338,6 +2338,16 @@ class WeChatDB:
         md5 = None
         if isinstance(content, bytes):
             content = self._friendly_content(content, mtype)
+        placeholder = "[%s]" % mtype
+        if not str(content or "").strip() or content == placeholder:
+            try:
+                compressed = r["compress_content"]
+            except (KeyError, IndexError):
+                compressed = None
+            if isinstance(compressed, bytes) and compressed:
+                expanded = self._friendly_content(compressed, mtype)
+                if expanded and expanded != placeholder:
+                    content = expanded
         pi = r["packed_info_data"]
         if pi:
             try:
@@ -2447,11 +2457,20 @@ class WeChatDB:
                 rows = []
                 for conn, table in buckets[md5]:
                     try:
-                        rows += conn.execute(
-                            "SELECT local_id, local_type, server_id, real_sender_id, "
-                            "create_time, message_content, packed_info_data, sort_seq "
-                            "FROM %s" % table
-                        ).fetchall()
+                        try:
+                            part = conn.execute(
+                                "SELECT local_id, local_type, server_id, real_sender_id, "
+                                "create_time, message_content, compress_content, "
+                                "packed_info_data, sort_seq FROM %s" % table
+                            ).fetchall()
+                        except sqlite3.DatabaseError:
+                            # 兼容没有 compress_content 列的旧版消息表。
+                            part = conn.execute(
+                                "SELECT local_id, local_type, server_id, real_sender_id, "
+                                "create_time, message_content, NULL AS compress_content, "
+                                "packed_info_data, sort_seq FROM %s" % table
+                            ).fetchall()
+                        rows += part
                     except sqlite3.DatabaseError:
                         continue
                 if not rows:

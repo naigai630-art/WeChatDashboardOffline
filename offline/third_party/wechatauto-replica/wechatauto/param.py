@@ -8,7 +8,8 @@ class WxParam:
     LANGUAGE: Literal['cn', 'cn_t', 'en'] = 'cn'
 
     # 是否启用日志文件
-    ENABLE_FILE_LOGGER: bool = True
+    # 离线看板仅保留控制台提示，避免在项目目录生成包含本机路径的运行日志。
+    ENABLE_FILE_LOGGER: bool = False
 
     # 下载文件/图片默认保存路径
     DEFAULT_SAVE_PATH: str = os.path.join(os.getcwd(), 'wechatauto文件下载')

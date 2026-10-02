@@ -76,6 +76,13 @@ def longest_call(records: Path | None) -> tuple[str, str]:
     return f'{hours}:{minutes:02d}:{seconds:02d}', best_label
 
 
+def format_duration(seconds: int | float) -> str:
+    seconds = max(0, round(float(seconds or 0)))
+    hours, rest = divmod(seconds, 3600)
+    minutes, seconds = divmod(rest, 60)
+    return f'{hours}:{minutes:02d}:{seconds:02d}'
+
+
 def main() -> None:
     args = parse_args()
     data = json.loads(args.stats.read_text(encoding='utf-8'))
@@ -182,15 +189,21 @@ def main() -> None:
     d.line((rx, 378, 1838, 378), fill=LINE, width=2)
     text(d, (rx, 402), '通话概览', 17, MUTED, True)
     call_data = data.get('calls', {})
+    connected_calls = int(call_data.get('connected', 0) or 0)
+    total_call_seconds = int(call_data.get('total_duration_seconds', 0) or 0)
+    average_call_seconds = call_data.get('average_duration_seconds')
+    if average_call_seconds is None:
+        average_call_seconds = round(total_call_seconds / connected_calls) if connected_calls else 0
     calls = [
         (f'{call_data.get("total", 0):,}', '总通话次数'),
-        (f'{call_data.get("connected", 0):,}', '接通次数'),
-        (f'{call_data.get("total_duration_seconds", 0) / 3600:.1f} 小时', '累计接通时长'),
+        (f'{connected_calls:,}', '接通次数'),
+        (f'{total_call_seconds / 3600:.1f} 小时', '累计接通时长'),
+        (format_duration(average_call_seconds), '平均通话时长'),
     ]
     for i, (value, label) in enumerate(calls):
-        x = rx + i * 166
-        text(d, (x, 439), value, 25, TEXT, True)
-        text(d, (x, 474), label, 11, MUTED, True)
+        x = rx + i * 124
+        text(d, (x, 439), value, 20, TEXT, True)
+        text(d, (x, 474), label, 10, MUTED, True)
     text(d, (rx, 510), '最长单次通话', 11, MUTED, True)
     longest_value, longest_label = longest_call(args.records)
     text(d, (rx + 118, 510), longest_value, 21, PINK[4], True, 'lm')

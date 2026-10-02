@@ -10,7 +10,7 @@ The Windows WeChat 4.x database workflow uses this independent upstream project:
 4. License: Apache License 2.0
 5. Bundled version: 1.2.4, commit `01eb06ef464d23bb651040ff76413f7183adf7e3a`
 
-The implementation is not authored by this repository's maintainer. The pinned source snapshot is retained under `offline/third_party/wechatauto-replica/` with its original license and is loaded only for local, read-only database access. The smaller package also contains `tools/get_wechat_keys.ps1`, a helper that can download the same original project.
+The implementation is not authored by this repository's maintainer. The runtime-required subset of the pinned source is retained under `offline/third_party/wechatauto-replica/` with its original license and is loaded only for local, read-only database access. Unused demos, UI automation modules, tests and media were removed from the optimized offline package; the complete source is available from the original repository above.
 
 No real database key, `keys.json`, WeChat database, wxid, database path, or chat export is bundled. Runtime keys remain on the user's computer.
 

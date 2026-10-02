@@ -25,7 +25,7 @@
 
 ```bat
 offline\runtime\python\python.exe tools\export_wechat_offline.py --keys-file "D:\安全目录\keys.json" --db-dir "D:\微信数据" --output work\wechat-export.json
-offline\runtime\python\python.exe tools\build_stats.py --input work\wechat-export.json --out-dir work\analysis_data --self-name "奶盖" --other-name "芄兰"
+offline\runtime\python\python.exe tools\build_stats.py --input work\wechat-export.json --out-dir work\analysis_data --self-name "我" --other-name "对方"
 ```
 
 密钥文件只按你给出的路径读取，不会被复制进项目或 ZIP。
